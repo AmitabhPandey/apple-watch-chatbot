@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import axios from "axios";
 
 interface Citation {
   title: string;
@@ -9,6 +10,97 @@ interface Citation {
 interface GeminiResponse {
   message: string;
   citations?: Citation[];
+}
+
+interface SerperSearchResult {
+  title: string;
+  link: string;
+  snippet: string;
+  position: number;
+  date?: string;
+}
+
+interface SerperResponse {
+  searchParameters: {
+    q: string;
+    type: string;
+    engine: string;
+  };
+  organic: SerperSearchResult[];
+  credits: number;
+}
+
+// Function to search web using Serper API
+async function searchWeb(query: string): Promise<SerperSearchResult[]> {
+  try {
+    if (!process.env.SERPER_API_KEY) {
+      console.log("Serper API key not configured, skipping web search");
+      return [];
+    }
+
+    console.log("Searching web for:", query);
+
+    const response = await axios.post<SerperResponse>(
+      "https://google.serper.dev/search",
+      { q: query },
+      {
+        headers: {
+          "X-API-KEY": process.env.SERPER_API_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log(`Found ${response.data.organic?.length || 0} search results`);
+    return response.data.organic?.slice(0, 5) || [];
+  } catch (error) {
+    console.error("Error searching web:", error);
+    return [];
+  }
+}
+
+// Helper function to optimize user query for web search
+async function optimizeSearchQuery(
+  userQuery: string,
+  apiKey: string
+): Promise<string> {
+  const optimizationPrompt = `You are a search query optimizer for Apple Watch related questions.
+
+User question: "${userQuery}"
+
+Generate an optimized search query that will find the most relevant, current information about Apple Watch.
+Focus on extracting key terms, features, models, and technical details.
+Make the query concise but comprehensive for web search.
+
+Respond with only the optimized search query text, nothing else.`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: optimizationPrompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 100 },
+        }),
+      }
+    );
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (text) {
+      const optimizedQuery = text.trim();
+      console.log("Optimized search query:", optimizedQuery);
+      return optimizedQuery;
+    }
+  } catch (error) {
+    console.error("Error optimizing query:", error);
+  }
+
+  // Fallback to original query if optimization fails
+  return userQuery;
 }
 
 const SYSTEM_PROMPT = `You're a friendly Apple Watch expert who loves helping people get the most out of their watch! Think of yourself as that tech-savvy friend who's always excited to share Apple Watch tips and tricks.
@@ -42,16 +134,18 @@ You MUST respond with valid JSON in this exact format:
 }
 
 Citation Guidelines:
-- ONLY include citations when providing factual information about: features, specifications, troubleshooting steps, technical details, updates/announcements
-- DO NOT include citations for: greetings, casual conversation, follow-up questions, general chat
-- Use these trusted sources when applicable:
-  * Apple Support: support.apple.com/apple-watch
-  * Apple Tech Specs: apple.com/apple-watch/specs
-  * Apple Watch User Guide: support.apple.com/guide/watch
-  * Apple Newsroom: apple.com/newsroom
-  * MacRumors: macrumors.com
-  * 9to5Mac: 9to5mac.com
-- If no citations are needed, use empty array: "citations": []
+- ALWAYS review the web search results provided in the context and include relevant citations in your response
+- Cite sources liberally - whenever you provide information that came from the search results, include the citation
+- Include citations for ANY factual information including: features, specifications, comparisons, troubleshooting, tips, updates, how-to guides, pricing, availability, technical details
+- Select 2-4 of the most relevant sources from the search results that support your answer
+- Include citations in this exact format using the title, URL, and snippet from search results:
+  {
+    "title": "Exact title from search result",
+    "url": "Exact URL from search result",
+    "description": "Relevant snippet from search result"
+  }
+- ONLY skip citations for: simple greetings (like "hi", "hello"), pure opinion questions, or when no search results are available
+- When in doubt, include citations - it's better to cite sources than to omit them
 
 Be yourself - helpful, friendly, and genuinely excited about Apple Watch! 🍎⌚`;
 
@@ -109,6 +203,34 @@ export async function POST(request: NextRequest) {
         conversationContext += `${speaker}: ${msg.content}\n`;
       });
       conversationContext += "\n";
+    }
+
+    // Step 1: Optimize the query for web search
+    console.log("Optimizing query for web search...");
+    const optimizedQuery = await optimizeSearchQuery(
+      message,
+      process.env.GEMINI_API_KEY
+    );
+
+    // Step 2: Always perform web search with optimized query
+    console.log("Performing web search with optimized query:", optimizedQuery);
+    const webSearchResults = await searchWeb(optimizedQuery);
+
+    // Add search results to context
+    if (webSearchResults.length > 0) {
+      conversationContext += "\n\n--- CURRENT WEB SEARCH RESULTS ---\n";
+      conversationContext +=
+        "Use these sources to provide accurate, up-to-date information. Include relevant sources in your citations array:\n\n";
+      webSearchResults.forEach((result, index) => {
+        conversationContext += `[${index + 1}] ${result.title}\n`;
+        conversationContext += `URL: ${result.link}\n`;
+        conversationContext += `Info: ${result.snippet}\n`;
+        if (result.date) conversationContext += `Date: ${result.date}\n`;
+        conversationContext += "\n";
+      });
+      conversationContext += "--- END OF SEARCH RESULTS ---\n\n";
+    } else {
+      console.log("No search results found");
     }
 
     conversationContext += `User: ${message}\n\nYou:`;
@@ -170,7 +292,9 @@ export async function POST(request: NextRequest) {
     console.log("Response text length:", text.length);
 
     // Parse JSON response with fallback to plain text
-    const parseGeminiResponse = (rawText: string): { message: string; citations?: Citation[] } => {
+    const parseGeminiResponse = (
+      rawText: string
+    ): { message: string; citations?: Citation[] } => {
       try {
         // Clean markdown code blocks
         const cleanText = rawText
@@ -184,7 +308,9 @@ export async function POST(request: NextRequest) {
         if (typeof parsed.message === "string") {
           return {
             message: parsed.message,
-            citations: Array.isArray(parsed.citations) ? parsed.citations : undefined,
+            citations: Array.isArray(parsed.citations)
+              ? parsed.citations
+              : undefined,
           };
         }
       } catch (error) {
