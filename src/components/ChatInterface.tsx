@@ -131,6 +131,19 @@ export default function ChatInterface() {
       });
 
       if (!response.ok) {
+        // Handle specific HTTP status codes
+        if (response.status === 429) {
+          const errorMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            content:
+              "⏳ Getting a lot of requests right now! Please wait about 15 minutes and try again. The API rate limit will reset shortly.",
+            isUser: false,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, errorMessage]);
+          setIsLoading(false);
+          return;
+        }
         throw new Error("Failed to get response");
       }
 
