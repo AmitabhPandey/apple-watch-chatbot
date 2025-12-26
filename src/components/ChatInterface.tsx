@@ -1,78 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Apple, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
-
-interface Citation {
-  title: string;
-  url: string;
-  description: string;
-}
-
-interface Message {
-  id: string;
-  content: string;
-  isUser: boolean;
-  timestamp: Date;
-  citations?: Citation[];
-}
-
-const QUICK_QUESTIONS = [
-  "What's new in Apple Watch Series 10?",
-  "How to check heart rate on Apple Watch?",
-  "Apple Watch battery life tips",
-  "Compare Apple Watch models",
-  "How to set up Apple Watch?",
-  "Apple Watch fitness tracking features",
-];
-
-const CitationCard = ({ citations }: { citations: Citation[] }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  return (
-    <div className="mt-2 border-t border-white/10 pt-2">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1 text-xs text-blue-300 hover:text-blue-200 transition-colors"
-      >
-        {isExpanded ? (
-          <ChevronUp className="w-3 h-3" />
-        ) : (
-          <ChevronDown className="w-3 h-3" />
-        )}
-        <span>
-          {citations.length} {citations.length === 1 ? "source" : "sources"}
-        </span>
-      </button>
-
-      {isExpanded && (
-        <div className="mt-2 space-y-2">
-          {citations.map((citation, index) => (
-            <a
-              key={index}
-              href={citation.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block p-2 bg-white/5 rounded-lg hover:bg-white/10 transition-colors group"
-            >
-              <div className="flex items-start gap-2">
-                <ExternalLink className="w-3 h-3 mt-0.5 text-blue-300 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-white group-hover:text-blue-200 transition-colors truncate">
-                    {citation.title}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {citation.description}
-                  </p>
-                </div>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+import { Send, Apple } from "lucide-react";
+import { Message } from "@/types/chat";
+import { ChatMessage } from "./ChatMessage";
+import { QuickQuestions } from "./QuickQuestions";
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
@@ -111,9 +43,8 @@ export default function ChatInterface() {
     setIsLoading(true);
 
     try {
-      // Prepare conversation history (excluding the welcome message and current user message)
       const conversationHistory = messages
-        .filter((msg) => msg.id !== "1") // Exclude welcome message
+        .filter((msg) => msg.id !== "1")
         .map((msg) => ({
           isUser: msg.isUser,
           content: msg.content,
@@ -131,7 +62,6 @@ export default function ChatInterface() {
       });
 
       if (!response.ok) {
-        // Handle specific HTTP status codes
         if (response.status === 429) {
           const errorMessage: Message = {
             id: (Date.now() + 1).toString(),
@@ -178,10 +108,6 @@ export default function ChatInterface() {
     sendMessage(inputMessage);
   };
 
-  const handleQuickQuestion = (question: string) => {
-    sendMessage(question);
-  };
-
   return (
     <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20">
       {/* Chat Header */}
@@ -199,52 +125,13 @@ export default function ChatInterface() {
 
       {/* Quick Questions */}
       {messages.length === 1 && (
-        <div className="p-4 border-b border-white/20">
-          <p className="text-sm text-gray-300 mb-3">
-            Quick questions to get started:
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {QUICK_QUESTIONS.map((question, index) => (
-              <button
-                key={index}
-                onClick={() => handleQuickQuestion(question)}
-                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-colors"
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-        </div>
+        <QuickQuestions onSelect={sendMessage} />
       )}
 
       {/* Messages */}
       <div className="h-96 overflow-y-auto p-4 space-y-4 chat-scrollbar">
         {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${
-              message.isUser ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
-                message.isUser
-                  ? "bg-blue-600 text-white"
-                  : "bg-white/20 text-white border border-white/20"
-              }`}
-            >
-              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-              <p className="text-xs opacity-70 mt-1" suppressHydrationWarning>
-                {new Date(message.timestamp).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </p>
-              {!message.isUser && message.citations && message.citations.length > 0 && (
-                <CitationCard citations={message.citations} />
-              )}
-            </div>
-          </div>
+          <ChatMessage key={message.id} message={message} />
         ))}
 
         {isLoading && (
