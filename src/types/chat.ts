@@ -2,6 +2,7 @@ export interface Citation {
     title: string;
     url: string;
     description: string;
+    imageUrl?: string;
 }
 
 export interface Message {

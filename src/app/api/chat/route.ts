@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { config, validateConfig } from "@/lib/config";
 import { searchWeb } from "@/lib/services/search";
 import { generateGeminiResponse, optimizeSearchQuery } from "@/lib/services/ai";
+import { getOgImage } from "@/lib/services/firecrawl";
 import { SYSTEM_PROMPT } from "@/prompts/chatPrompt";
 
 export async function POST(request: NextRequest) {
@@ -57,6 +58,22 @@ export async function POST(request: NextRequest) {
       conversationContext,
       config.geminiApiKey
     );
+
+    // Step 4: Fetch images for all citations if available
+    if (citations && citations.length > 0) {
+      await Promise.all(
+        citations.map(async (citation) => {
+          try {
+            const imageUrl = await getOgImage(citation.url);
+            if (imageUrl) {
+              citation.imageUrl = imageUrl;
+            }
+          } catch (error) {
+            console.error(`Failed to fetch image for citation ${citation.url}:`, error);
+          }
+        })
+      );
+    }
 
     return NextResponse.json({
       response: responseMessage,
