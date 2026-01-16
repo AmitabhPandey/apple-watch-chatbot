@@ -1,30 +1,59 @@
 import axios from "axios";
-import { SerperResponse, SerperSearchResult } from "@/types/chat";
+import { SearchAPIResponse, SearchResult } from "@/types/chat";
+import { config } from "@/lib/config";
 
-export async function searchWeb(query: string): Promise<SerperSearchResult[]> {
+export async function searchWeb(query: string): Promise<SearchResult[]> {
     try {
-        if (!process.env.SERPER_API_KEY) {
-            console.log("Serper API key not configured, skipping web search");
+        if (!config.searchApiKey) {
+            console.log("Search API key not configured, skipping web search");
             return [];
         }
 
-        console.log("Searching web for:", query);
+        console.log("Searching web with SearchAPI.io for:", query);
 
-        const response = await axios.post<SerperResponse>(
-            "https://google.serper.dev/search",
-            { q: query },
+        const response = await axios.get<SearchAPIResponse>(
+            "https://www.searchapi.io/api/v1/search",
             {
-                headers: {
-                    "X-API-KEY": process.env.SERPER_API_KEY,
-                    "Content-Type": "application/json",
+                params: {
+                    engine: "google",
+                    q: query,
+                    api_key: config.searchApiKey,
                 },
             }
         );
 
-        console.log(`Found ${response.data.organic?.length || 0} search results`);
-        return response.data.organic?.slice(0, 5) || [];
+        const results: SearchResult[] = [];
+
+        // Capture AI Overview if available
+        if (response.data.ai_overview?.text_blocks) {
+            const overviewText = response.data.ai_overview.text_blocks
+                .map(block => {
+                    if (block.answer) return block.answer;
+                    if (block.items) return block.items.map(i => i.answer).join("\n");
+                    return "";
+                })
+                .filter(Boolean)
+                .join("\n");
+
+            if (overviewText) {
+                results.push({
+                    title: "AI Overview",
+                    link: "#",
+                    snippet: overviewText,
+                    position: 0
+                });
+            }
+        }
+
+        // Add organic results
+        const organicResults = response.data.organic_results?.slice(0, config.searchResultsCount) || [];
+        results.push(...organicResults);
+
+        console.log(`Found ${results.length} total search items (including AI overview if present)`);
+        return results;
     } catch (error) {
         console.error("Error searching web:", error);
         return [];
     }
 }
+

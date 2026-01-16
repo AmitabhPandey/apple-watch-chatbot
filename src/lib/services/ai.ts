@@ -5,7 +5,13 @@ export async function optimizeSearchQuery(
     userQuery: string,
     apiKey: string
 ): Promise<string> {
-    const prompt = OPTIMIZATION_PROMPT(userQuery);
+    const currentDate = new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+    });
+    const prompt = OPTIMIZATION_PROMPT(userQuery, currentDate);
 
     try {
         const response = await fetch(
@@ -15,7 +21,7 @@ export async function optimizeSearchQuery(
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.3, maxOutputTokens: 100 },
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 300 },
                 }),
             }
         );

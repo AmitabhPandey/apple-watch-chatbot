@@ -17,20 +17,33 @@ export interface GeminiResponse {
     citations?: Citation[];
 }
 
-export interface SerperSearchResult {
+export interface SearchResult {
     title: string;
     link: string;
     snippet: string;
     position: number;
     date?: string;
+    source?: string;
 }
 
-export interface SerperResponse {
-    searchParameters: {
-        q: string;
-        type: string;
-        engine: string;
-    };
-    organic: SerperSearchResult[];
-    credits: number;
+export interface AIOverviewTextBlock {
+    type: string;
+    answer?: string;
+    items?: { type: string; answer: string }[];
+    link?: string;
+    source?: string;
+    channel?: string;
+    date?: string;
 }
+
+export interface SearchAPIResponse {
+    search_metadata: {
+        id: string;
+        status: string;
+    };
+    organic_results: SearchResult[];
+    ai_overview?: {
+        text_blocks: AIOverviewTextBlock[];
+    };
+}
+
